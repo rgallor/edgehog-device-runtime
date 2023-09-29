@@ -33,6 +33,7 @@ async-trait = { workspace = true }
 bytes = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 env_logger = { workspace = true }
+edgehog-forwarder = { workspace = true, optional = true }
 futures = { workspace = true }
 log = { workspace = true }
 procfs = { workspace = true }
@@ -65,39 +66,50 @@ tokio = { workspace = true, features = ["test-util"] }
 
 [features]
 systemd = ["dep:systemd"]
+forwarder = ["dep:edgehog-forwarder"]
 e2e_test = []
 
 [workspace.dependencies]
 astarte-device-sdk = "0.5.1"
 astarte-message-hub = "0.5.2"
 async-trait = "0.1.72"
+backoff = "0.4.0"
 base64 = "0.13.1"
 bytes = "1.4.0"
 clap = "4.3.19"
+displaydoc = "0.2.4"
+edgehog-forwarder = { package = "edgehog-device-runtime-forwarder", path = "./edgehog-device-runtime-forwarder", version = "=0.1.0" }
 env_logger = "0.10.0"
 futures = "0.3.28"
+hex = "0.4.3"
+http = "0.2.9"
+httpmock = "0.6"
 log = "0.4.20"
+mockall = "0.11.4"
+pbjson-types = "0.5"
 procfs = "0.15.1"
+prost = "0.12.1"
 reqwest = "0.11.18"
 rustc_version_runtime = "0.2.1"
 serde = "1.0.181"
 serde_json = "1.0.104"
 sysinfo = "0.29.7"
 systemd = "0.10.0"
+tempdir = "0.3.7"
 thiserror = "1.0.44"
 tokio = "1.32.0"
 tokio-stream = "0.1.14"
+tokio-tungstenite = "0.20.1"
 tokio-util = "0.7.8"
 toml = "0.7.6"
 tonic = "0.8.3"
+tracing = "0.1.0"
+tungstenite = "0.20.1"
 udev = "0.7.0"
+url = "2.4.1"
 uuid = "1.4.1"
 wifiscanner = "0.5.1"
 zbus = { version = "2.2.0", default-features = false }
-httpmock = "0.6"
-mockall = "0.11.4"
-pbjson-types = "0.5"
-tempdir = "0.3.7"
 
 # Pinned transitive dependencies
 time = "=0.3.23"

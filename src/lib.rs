@@ -37,6 +37,8 @@ mod commands;
 pub mod data;
 mod device;
 pub mod error;
+#[cfg(feature = "forwarder")]
+mod forwarder;
 mod led_behavior;
 mod ota;
 mod power_management;
@@ -73,6 +75,8 @@ pub struct DeviceManager<T: Publisher + Subscriber + Clone> {
     ota_event_channel: Sender<AstarteDeviceDataEvent>,
     data_event_channel: Sender<AstarteDeviceDataEvent>,
     telemetry: Arc<RwLock<telemetry::Telemetry>>,
+    #[cfg(feature = "forwarder")]
+    forwarder_handler: crate::forwarder::Forwarder,
 }
 
 impl<T: Publisher + Subscriber + Clone + 'static> DeviceManager<T> {
@@ -106,6 +110,8 @@ impl<T: Publisher + Subscriber + Clone + 'static> DeviceManager<T> {
             ota_event_channel: ota_tx,
             data_event_channel: data_tx,
             telemetry: Arc::new(RwLock::new(tel)),
+            #[cfg(feature = "forwarder")]
+            forwarder_handler: crate::forwarder::Forwarder::default(),
         };
 
         device_runtime.init_ota_event(ota_handler, ota_rx);
@@ -222,6 +228,10 @@ impl<T: Publisher + Subscriber + Clone + 'static> DeviceManager<T> {
                     match data_event.interface.as_str() {
                         "io.edgehog.devicemanager.OTARequest" => {
                             self.ota_event_channel.send(data_event).await.unwrap()
+                        }
+                        #[cfg(feature = "forwarder")]
+                        "io.edgehog.devicemanager.RemoteTerminalRequest" => {
+                            self.forwarder_handler.start(data_event).await
                         }
                         _ => {
                             self.data_event_channel.send(data_event).await.unwrap();

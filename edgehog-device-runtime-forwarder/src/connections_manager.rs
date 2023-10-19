@@ -24,7 +24,7 @@ use url::Url;
 
 use crate::connection::ConnectionError;
 use crate::connections::Connections;
-use crate::messages::{Http, HttpMessage, Id, ProtoError, ProtoMessage, Protocol as ProtoProtocol};
+use crate::messages::{Id, ProtoError, ProtoMessage, Protocol as ProtoProtocol};
 
 /// Errors occurring during the connections management.
 #[derive(Display, ThisError, Debug)]
@@ -70,8 +70,6 @@ impl ConnectionsManager {
     /// Establish a new WebSocket connection between the device and the bridge.
     #[instrument]
     pub async fn connect(url: Url) -> Result<Self, Error> {
-        // TODO: check if, when a wrong URL is passed, it will endlessly try to connect
-
         let ws_stream = Self::ws_connect(&url).await?;
 
         // this channel is used by tasks associated to each connection to communicate new
@@ -159,7 +157,6 @@ impl ConnectionsManager {
                     .map(|_| ControlFlow::Continue(()))
             }
             // in case no data is received in PING_TIMEOUT seconds over the websocket, send a ping.
-            // TODO: no check is done to verify that a Pong frame has been received
             WebSocketEvents::Ping => {
                 let msg = TungMessage::Ping(Vec::new());
                 debug!("sending ping message");
@@ -219,7 +216,7 @@ impl ConnectionsManager {
             TungMessage::Binary(bytes) => {
                 let res = match ProtoMessage::decode(&bytes) {
                     // handle the actual protocol message
-                    Ok(proto_msg) => self.handle_proto_msg(proto_msg),
+                    Ok(proto_msg) => self.handle_proto_msg(proto_msg).await,
                     Err(err) => {
                         error!("failed to decode protobuf message due to {err:?}");
                         Ok(())
@@ -238,24 +235,11 @@ impl ConnectionsManager {
     }
 
     /// Handle a [`protobuf message`](ProtoMessage).
-    pub(crate) fn handle_proto_msg(&mut self, proto_msg: ProtoMessage) -> Result<(), Error> {
+    pub(crate) async fn handle_proto_msg(&mut self, proto_msg: ProtoMessage) -> Result<(), Error> {
         // handle only HTTP requests, not other kind of protobuf messages
         match proto_msg.protocol {
-            ProtoProtocol::Http(Http {
-                request_id,
-                http_msg: HttpMessage::Request(http_req),
-            }) => self.connections.handle_http(request_id, http_req),
-            ProtoProtocol::Http(Http {
-                request_id,
-                http_msg: HttpMessage::Response(_http_res),
-            }) => {
-                error!("Http response should not be sent by the bridge");
-                Err(Error::WrongMessage(request_id))
-            }
-            ProtoProtocol::WebSocket(_ws) => {
-                error!("WebSocket messages are not supported yet");
-                Err(Error::Unsupported)
-            }
+            ProtoProtocol::Http(http) => self.connections.handle_http(http),
+            ProtoProtocol::WebSocket(ws) => self.connections.handle_ws(ws).await,
         }
     }
 

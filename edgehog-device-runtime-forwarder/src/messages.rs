@@ -33,6 +33,8 @@ use http::{HeaderMap, HeaderName, HeaderValue};
 use prost::Message as ProstMessage;
 use reqwest::{Client as ReqwClient, RequestBuilder};
 use thiserror::Error as ThisError;
+use tungstenite::{http::Request as TungHttpRequest, Error as TungError, Message as TungMessage};
+
 use url::ParseError;
 
 use edgehog_device_forwarder_proto as proto;
@@ -42,6 +44,7 @@ use edgehog_device_forwarder_proto::{
     http::Response as ProtoHttpResponse, message::Protocol as ProtoProtocol,
     web_socket::Message as ProtoWsMessage, Http as ProtoHttp, WebSocket as ProtoWebSocket,
 };
+use tracing::error;
 
 /// Errors occurring while handling [`protobuf`](https://protobuf.dev/overview/) messages
 #[derive(Display, ThisError, Debug)]
@@ -63,12 +66,18 @@ pub enum ProtoError {
     Http(#[from] http::Error),
     /// Error while parsing Headers.
     ParseHeaders(#[from] http::header::ToStrError),
-    /// Invalid port number
+    /// Invalid port number.
     InvalidPortNumber(#[from] TryFromIntError),
+    /// Wrong HTTP method field, `{0}`.
+    WrongHttpMethod(String),
+    /// Error performing exponential backoff when trying to connect with TTYD, {0}
+    WebSocketConnect(#[from] TungError),
+    /// Received a wrong WebSocket frame.
+    WrongWsFrame,
 }
 
 /// Requests Id.
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct Id(Vec<u8>);
 
 impl Debug for Id {
@@ -201,8 +210,10 @@ pub(crate) struct HttpResponse {
 /// WebSocket request fields.
 #[derive(Debug)]
 pub(crate) struct WebSocket {
-    socket_id: Id,
-    message: WebSocketMessage,
+    /// WebSocket connection identifier
+    pub(crate) socket_id: Id,
+    /// WebSocket message
+    pub(crate) message: WebSocketMessage,
 }
 
 /// [`WebSocket`] message type.
@@ -213,6 +224,25 @@ pub(crate) enum WebSocketMessage {
     Ping(Vec<u8>),
     Pong(Vec<u8>),
     Close { code: u16, reason: Option<String> },
+}
+
+impl ProtoMessage {
+    /// Convert a Tungstenite frame into a ProtoMessage
+    pub(crate) fn try_from_tung(socket_id: Id, tung_msg: TungMessage) -> Result<Self, ProtoError> {
+        Ok(Self::new(Protocol::WebSocket(WebSocket {
+            socket_id,
+            message: WebSocketMessage::try_from(tung_msg)?,
+        })))
+    }
+}
+
+impl Protocol {
+    pub(crate) fn into_ws(self) -> Option<WebSocket> {
+        match self {
+            Protocol::Http(_) => None,
+            Protocol::WebSocket(ws) => Some(ws),
+        }
+    }
 }
 
 impl Http {
@@ -241,6 +271,43 @@ impl HttpRequest {
             .body(self.body);
 
         Ok(http_builder)
+    }
+
+    /// Check if the HTTP request contains an "Upgrade" header.
+    pub(crate) fn is_upgrade(&self) -> bool {
+        self.headers.contains_key("Upgrade")
+    }
+
+    pub(crate) fn upgrade(self) -> Result<TungHttpRequest<()>, ProtoError> {
+        let url = format!(
+            "ws://localhost:{}/{}?{}",
+            self.port, self.path, self.query_string
+        );
+
+        let req = match self.method.to_ascii_uppercase().as_str() {
+            "GET" => TungHttpRequest::get(url),
+            "DELETE" => TungHttpRequest::delete(url),
+            "HEAD" => TungHttpRequest::head(url),
+            "PATCH" => TungHttpRequest::patch(url),
+            "POST" => TungHttpRequest::post(url),
+            "PUT" => TungHttpRequest::put(url),
+            wrong_method => {
+                error!("wrong HTTP method received, {}", wrong_method);
+                return Err(ProtoError::WrongHttpMethod(wrong_method.to_string()));
+            }
+        };
+
+        // add the headers to the request
+        let req = hashmap_to_headermap(self.headers)
+            .into_iter()
+            .fold(req, |req, (key, val)| match key {
+                Some(key) => req.header(key, val),
+                None => req,
+            });
+
+        // TODO: check that the body is empty. If not, return an error (or a warning stating that it will not be used in the request)
+
+        req.body(()).map_err(ProtoError::from)
     }
 }
 
@@ -303,6 +370,26 @@ where
         .collect::<Result<HashMap<String, String>, ProtoError>>()?;
 
     Ok(hm)
+}
+
+/// Convert a [`HashMap`] containing all HTTP headers into a [`HeaderMap`].
+pub(crate) fn hashmap_to_headermap<I>(headers: I) -> HeaderMap
+where
+    I: IntoIterator<Item = (String, String)>,
+{
+    headers
+        .into_iter()
+        .map(|(name, val)| {
+            (
+                HeaderName::from_str(name.as_ref()),
+                HeaderValue::from_str(val.as_ref()),
+            )
+        })
+        // We ignore the errors here. If you want to get a list of failed conversions, you can use Iterator::partition
+        // to help you out here
+        .filter(|(k, v)| k.is_ok() && v.is_ok())
+        .map(|(k, v)| (k.unwrap(), v.unwrap()))
+        .collect()
 }
 
 impl TryFrom<proto::Message> for ProtoMessage {
@@ -502,5 +589,37 @@ impl From<WebSocket> for ProtoWebSocket {
             socket_id: ws.socket_id.0,
             message: Some(ws_message),
         }
+    }
+}
+
+impl TryFrom<TungMessage> for WebSocketMessage {
+    type Error = ProtoError;
+
+    fn try_from(tung_msg: TungMessage) -> Result<Self, Self::Error> {
+        let msg = match tung_msg {
+            tungstenite::Message::Text(data) => WebSocketMessage::text(data),
+            tungstenite::Message::Binary(data) => WebSocketMessage::binary(data),
+            tungstenite::Message::Ping(data) => WebSocketMessage::ping(data),
+            tungstenite::Message::Pong(data) => WebSocketMessage::pong(data),
+            tungstenite::Message::Close(data) => {
+                // instead of returning an error, here i build a default close frame in case no frame is passed
+                let (code, reason) = match data {
+                    Some(close_frame) => {
+                        let code = close_frame.code.into();
+                        let reason = Some(close_frame.reason.into_owned());
+                        (code, reason)
+                    }
+                    None => (1000, None),
+                };
+
+                WebSocketMessage::close(code, reason)
+            }
+            tungstenite::Message::Frame(_) => {
+                error!("this kind of message should not be sent");
+                return Err(ProtoError::WrongWsFrame);
+            }
+        };
+
+        Ok(msg)
     }
 }

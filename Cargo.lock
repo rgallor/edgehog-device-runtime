@@ -1090,6 +1090,7 @@ name = "edgehog-device-runtime-forwarder"
 version = "0.1.0"
 dependencies = [
  "astarte-device-sdk",
+ "async-trait",
  "backoff",
  "displaydoc",
  "edgehog-device-forwarder-proto",

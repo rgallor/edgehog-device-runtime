@@ -31,9 +31,8 @@ pub enum DeviceManagerError {
     #[error(transparent)]
     AstarteError(#[from] astarte_device_sdk::AstarteError),
 
-    #[error(transparent)]
-    ProcError(#[from] procfs::ProcError),
-
+    // #[error(transparent)]
+    // ProcError(#[from] procfs::ProcError),
     #[error(transparent)]
     IOError(#[from] std::io::Error),
 

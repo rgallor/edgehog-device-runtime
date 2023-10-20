@@ -19,7 +19,7 @@
  */
 
 use clap::Parser;
-use procfs::cmdline;
+// use procfs::cmdline;
 use std::fs;
 use uuid::Uuid;
 use zbus::{dbus_interface, ConnectionBuilder};
@@ -42,6 +42,7 @@ struct Cli {
     kernel_cmdline_key: Option<String>,
 }
 
+#[allow(dead_code)]
 struct Device {
     file_path: Option<String>,
     kernel_cmdline_key: Option<String>,
@@ -55,15 +56,15 @@ impl Device {
         if self.file_path.is_some() {
             data = fs::read_to_string(&self.file_path.clone().unwrap()).unwrap_or_default();
         }
-        if self.kernel_cmdline_key.is_some() {
-            let cmdline_params = cmdline().unwrap();
-            for param in cmdline_params.iter() {
-                if param.starts_with(&self.kernel_cmdline_key.clone().unwrap()) {
-                    let first_half = format!("{}=", &self.kernel_cmdline_key.clone().unwrap());
-                    data = param.replace(&first_half, "");
-                }
-            }
-        }
+        // if self.kernel_cmdline_key.is_some() {
+        //     let cmdline_params = cmdline().unwrap();
+        //     for param in cmdline_params.iter() {
+        //         if param.starts_with(&self.kernel_cmdline_key.clone().unwrap()) {
+        //             let first_half = format!("{}=", &self.kernel_cmdline_key.clone().unwrap());
+        //             data = param.replace(&first_half, "");
+        //         }
+        //     }
+        // }
         let ns = if namespace.is_empty() {
             DEFAULT_NAMESPACE
         } else {

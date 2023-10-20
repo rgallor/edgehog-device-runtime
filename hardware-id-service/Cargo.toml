@@ -15,7 +15,6 @@ rust-version = { workspace = true }
 [dependencies]
 base64 = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-procfs = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 uuid = { workspace = true, features = ["v5", "v4"] }
 zbus = { workspace = true, default-features = false, features = ["tokio"] }

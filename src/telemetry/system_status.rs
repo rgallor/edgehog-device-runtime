@@ -32,13 +32,11 @@ pub struct SystemStatus {
 
 /// get structured data for `io.edgehog.devicemanager.SystemStatus` interface
 pub fn get_system_status() -> Result<SystemStatus, DeviceManagerError> {
-    let meminfo = procfs::Meminfo::new()?;
-
     Ok(SystemStatus {
-        availMemoryBytes: meminfo.mem_available.unwrap_or(0) as i64,
-        bootId: procfs::sys::kernel::random::boot_id()?,
-        taskCount: procfs::process::all_processes()?.count() as i32,
-        uptimeMillis: procfs::Uptime::new()?.uptime_duration().as_millis() as i64,
+        availMemoryBytes: 0i64,
+        bootId: String::from("BootId"),
+        taskCount: 0i32,
+        uptimeMillis: 0i64,
     })
 }
 

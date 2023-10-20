@@ -23,6 +23,7 @@ use astarte_device_sdk::types::AstarteType;
 use log::warn;
 use std::collections::HashMap;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 enum TechnologyType {
     Ethernet,
@@ -50,59 +51,59 @@ struct NetworkInterfaceProperties {
 
 fn get_supported_network_interfaces() -> Result<Vec<NetworkInterfaceProperties>, DeviceManagerError>
 {
-    const ARPHRD_ETHER: &str = "1";
-    const ARPHRD_PPP: &str = "512";
+    const _ARPHRD_ETHER: &str = "1";
+    const _ARPHRD_PPP: &str = "512";
 
-    let mut results = Vec::new();
+    let results = Vec::new();
 
-    let mut enumerator = udev::Enumerator::new()?;
+    // let mut enumerator = udev::Enumerator::new()?;
 
-    enumerator.match_subsystem("net")?;
+    // enumerator.match_subsystem("net")?;
 
-    for device in enumerator.scan_devices()? {
-        if device.property_value("ID_BUS").is_none() {
-            // This is a virtual device
-            continue;
-        }
+    // for device in enumerator.scan_devices()? {
+    //     if device.property_value("ID_BUS").is_none() {
+    //         // This is a virtual device
+    //         continue;
+    //     }
 
-        let (address, type_) = match (
-            device.attribute_value("address"),
-            device.attribute_value("type"),
-        ) {
-            (Some(addr), Some(type_)) => (addr, type_),
-            _ => continue,
-        };
+    //     let (address, type_) = match (
+    //         device.attribute_value("address"),
+    //         device.attribute_value("type"),
+    //     ) {
+    //         (Some(addr), Some(type_)) => (addr, type_),
+    //         _ => continue,
+    //     };
 
-        let technology_type = match type_.to_string_lossy().trim() {
-            ARPHRD_ETHER => {
-                let uevent = device
-                    .attribute_value("uevent")
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .into_owned();
+    //     let technology_type = match type_.to_string_lossy().trim() {
+    //         ARPHRD_ETHER => {
+    //             let uevent = device
+    //                 .attribute_value("uevent")
+    //                 .unwrap_or_default()
+    //                 .to_string_lossy()
+    //                 .into_owned();
 
-                if uevent.contains("DEVTYPE=wlan") {
-                    TechnologyType::WiFi
-                } else if uevent.contains("DEVTYPE=bridge") {
-                    continue;
-                } else {
-                    TechnologyType::Ethernet
-                }
-            }
+    //             if uevent.contains("DEVTYPE=wlan") {
+    //                 TechnologyType::WiFi
+    //             } else if uevent.contains("DEVTYPE=bridge") {
+    //                 continue;
+    //             } else {
+    //                 TechnologyType::Ethernet
+    //             }
+    //         }
 
-            ARPHRD_PPP => TechnologyType::Cellular,
+    //         ARPHRD_PPP => TechnologyType::Cellular,
 
-            _ => {
-                continue;
-            }
-        };
+    //         _ => {
+    //             continue;
+    //         }
+    //     };
 
-        results.push(NetworkInterfaceProperties {
-            interface: device.sysname().to_string_lossy().into_owned(),
-            mac_address: address.to_string_lossy().into_owned(),
-            technology_type,
-        });
-    }
+    //     results.push(NetworkInterfaceProperties {
+    //         interface: device.sysname().to_string_lossy().into_owned(),
+    //         mac_address: address.to_string_lossy().into_owned(),
+    //         technology_type,
+    //     });
+    // }
 
     Ok(results)
 }

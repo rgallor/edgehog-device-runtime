@@ -12,5 +12,6 @@ target/
 *.pdb
 
 .idea/
+.vscode/
 /telemetry.json
 /.pre-commit-config.yaml

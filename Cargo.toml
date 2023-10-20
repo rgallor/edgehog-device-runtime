@@ -36,7 +36,6 @@ env_logger = { workspace = true }
 edgehog-forwarder = { workspace = true, optional = true }
 futures = { workspace = true }
 log = { workspace = true }
-procfs = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 rustc_version_runtime = { workspace = true }
 serde = { workspace = true }
@@ -49,7 +48,6 @@ tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 toml = { workspace = true }
 tonic = { workspace = true }
-udev = { workspace = true }
 uuid = { workspace = true, features = ["v5", "v4", "serde"] }
 wifiscanner = { workspace = true }
 zbus = { workspace = true, default-features = false, features = ["tokio"] }
@@ -87,7 +85,6 @@ httpmock = "0.6"
 log = "0.4.20"
 mockall = "0.11.4"
 pbjson-types = "0.5"
-procfs = "0.15.1"
 prost = "0.12.1"
 reqwest = "0.11.18"
 rustc_version_runtime = "0.2.1"
@@ -105,7 +102,6 @@ toml = "0.7.6"
 tonic = "0.8.3"
 tracing = "0.1.0"
 tungstenite = "0.20.1"
-udev = "0.7.0"
 url = "2.4.1"
 uuid = "1.4.1"
 wifiscanner = "0.5.1"

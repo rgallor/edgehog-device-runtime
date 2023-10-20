@@ -19,24 +19,23 @@
  */
 use crate::error::DeviceManagerError;
 use astarte_device_sdk::types::AstarteType;
-use procfs::cmdline;
 use std::collections::HashMap;
 use std::env;
 
 pub fn get_system_info() -> Result<HashMap<String, AstarteType>, DeviceManagerError> {
-    let cmdline_params = cmdline().unwrap();
-    let mut seral_number: Option<String> = env::var("EDGEHOG_SYSTEM_SERIAL_NUMBER").ok();
-    let mut part_number: Option<String> = env::var("EDGEHOG_SYSTEM_PART_NUMBER").ok();
-    for param in cmdline_params.iter() {
-        if seral_number.is_none() && param.starts_with("edgehog_system_serial_number") {
-            let first_half = format!("{}=", "edgehog_system_serial_number");
-            seral_number = Some(param.replace(first_half.as_str(), ""));
-        }
-        if part_number.is_none() && param.starts_with("edgehog_system_part_number") {
-            let first_half = format!("{}=", "edgehog_system_part_number");
-            part_number = Some(param.replace(first_half.as_str(), ""));
-        }
-    }
+    // let cmdline_params = cmdline().unwrap();
+    let seral_number: Option<String> = env::var("EDGEHOG_SYSTEM_SERIAL_NUMBER").ok();
+    let part_number: Option<String> = env::var("EDGEHOG_SYSTEM_PART_NUMBER").ok();
+    // for param in cmdline_params.iter() {
+    //     if seral_number.is_none() && param.starts_with("edgehog_system_serial_number") {
+    //         let first_half = format!("{}=", "edgehog_system_serial_number");
+    //         seral_number = Some(param.replace(first_half.as_str(), ""));
+    //     }
+    //     if part_number.is_none() && param.starts_with("edgehog_system_part_number") {
+    //         let first_half = format!("{}=", "edgehog_system_part_number");
+    //         part_number = Some(param.replace(first_half.as_str(), ""));
+    //     }
+    // }
     let mut ret: HashMap<String, AstarteType> = HashMap::new();
     if let Some(f) = seral_number {
         ret.insert("/serialNumber".to_owned(), f.into());

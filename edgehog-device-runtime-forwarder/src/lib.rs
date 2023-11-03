@@ -26,4 +26,7 @@ pub mod astarte;
 pub mod connection;
 pub mod connections;
 pub mod connections_manager;
-mod messages;
+pub mod messages;
+
+#[cfg(feature = "_test-utils")]
+pub mod test_utils;

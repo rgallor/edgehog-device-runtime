@@ -19,8 +19,8 @@ use tokio_tungstenite::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use url::Url;
 
+use crate::collection::Connections;
 use crate::connection::ConnectionError;
-use crate::connections::Connections;
 use crate::messages::{Id, ProtoMessage, ProtocolError};
 
 /// Errors occurring during the connections management.

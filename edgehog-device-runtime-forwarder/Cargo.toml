@@ -44,7 +44,9 @@ tracing = { workspace = true, features = ["log"] }
 tracing-subscriber = "0.3.17"
 tungstenite = { workspace = true }
 url = { workspace = true }
-uuid = { workspace = true, optional = true }
+
+[dev-dependencies]
+httpmock = {workspace = true}
 
 [features]
-_test-utils = ["dep:httpmock", "dep:uuid", "tokio/test-util"]
+_test-utils = ["dep:httpmock", "tokio/test-util"]

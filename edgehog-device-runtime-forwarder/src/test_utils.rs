@@ -8,8 +8,8 @@ use crate::connections_manager::{ConnectionsManager, Error};
 use edgehog_device_forwarder_proto as proto;
 use edgehog_device_forwarder_proto::{
     http::Message as ProtobufHttpMessage, http::Request as ProtobufHttpRequest,
-    message::Protocol as ProtobufProtocol, web_socket::Message as ProtobufWsMessage,
-    Http as ProtobufHttp, WebSocket as ProtobufWebSocket,
+    message::Protocol as ProtobufProtocol, web_socket::Close as ProtobufWebSocketClose,
+    web_socket::Message as ProtobufWsMessage, Http as ProtobufHttp, WebSocket as ProtobufWebSocket,
 };
 use futures::{SinkExt, StreamExt};
 use httpmock::prelude::*;
@@ -20,7 +20,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinHandle;
 use tokio_tungstenite::WebSocketStream;
 use tracing::{debug, instrument};
-use tungstenite::Message as TungMessage;
+use tungstenite::{Error as TungError, Message as TungMessage};
 use url::Url;
 
 /// Build a listener on a free port.
@@ -79,7 +79,7 @@ pub fn create_http_upgrade_req(request_id: Vec<u8>, url: &str) -> TungMessage {
     headers.insert("Sec-WebSocket-Version".to_string(), "13".to_string());
     headers.insert("Sec-WebSocket-Protocol".to_string(), "tty".to_string());
     headers.insert(
-        "Seco-WebSocket-Extensions".to_string(),
+        "Sec-WebSocket-Extensions".to_string(),
         "permessage-deflate".to_string(),
     );
     headers.insert(
@@ -117,12 +117,37 @@ pub fn is_ws_upgrade_response(http_msg: ProtobufHttpMessage) -> bool {
     }
 }
 
-/// Create a WebSocket binary [`tungstenite`] message.
-pub fn create_ws_binary(socket_id: Vec<u8>, data: Vec<u8>) -> TungMessage {
+/// Create a binary [`tungstenite`] message carrying a WebSocket frame.
+pub fn create_ws_msg(socket_id: Vec<u8>, frame: TungMessage) -> TungMessage {
     let proto_msg = proto::Message {
         protocol: Some(ProtobufProtocol::Ws(ProtobufWebSocket {
             socket_id,
-            message: Some(ProtobufWsMessage::Binary(data)),
+            message: Some(match frame {
+                TungMessage::Text(data) => ProtobufWsMessage::Text(data),
+                TungMessage::Binary(data) => ProtobufWsMessage::Binary(data),
+                TungMessage::Ping(data) => ProtobufWsMessage::Ping(data),
+                TungMessage::Pong(data) => ProtobufWsMessage::Pong(data),
+                TungMessage::Close(_) => panic!("should call the create_ws_close() function"),
+                TungMessage::Frame(_) => unreachable!("shouldn't be sent"),
+            }),
+        })),
+    };
+
+    let mut buf = Vec::with_capacity(proto_msg.encoded_len());
+    proto_msg.encode(&mut buf).unwrap();
+
+    TungMessage::Binary(buf)
+}
+
+/// Create a binary [`tungstenite`] message carrying a WebSocket close frame.
+pub fn create_ws_close(socket_id: Vec<u8>, code: u32, reason: Option<String>) -> TungMessage {
+    let proto_msg = proto::Message {
+        protocol: Some(ProtobufProtocol::Ws(ProtobufWebSocket {
+            socket_id,
+            message: Some(ProtobufWsMessage::Close(ProtobufWebSocketClose {
+                code,
+                reason: reason.unwrap_or_default(),
+            })),
         })),
     };
 
@@ -149,6 +174,20 @@ pub async fn send_ws_and_wait_next(
         .into_data();
 
     Message::decode(http_res.as_slice()).expect("failed to create protobuf message")
+}
+
+/// Close a WebSocket stream and return the response.
+pub async fn send_ws_close(
+    ws_stream: &mut WebSocketStream<TcpStream>,
+    data: TungMessage,
+) -> Result<(), TungError> {
+    ws_stream.send(data).await?;
+
+    ws_stream
+        .next()
+        .await
+        .expect("ws already closed")
+        .map(|msg| debug!("msg: {msg:?}"))
 }
 
 /// Utility struct to test a connection (HTTP or WebSocket) with the device
@@ -306,15 +345,13 @@ impl MockWebSocket {
             let msg = msg.expect("failed to receive from ws");
             // check what kind of frame is received
             let msg_response = match msg {
-                TungMessage::Text(_) => todo!("handle text"),
+                TungMessage::Text(_) => continue,
                 // if binary, forward it
-                TungMessage::Binary(data) => {
-                    // TODO: check if some checks should be performed before reconstructing the same message
-                    TungMessage::Binary(data)
-                }
-                TungMessage::Ping(_) => todo!("handle ping"),
-                TungMessage::Pong(_) => todo!("handle pong"),
-                TungMessage::Close(_) => todo!("handle close"),
+                TungMessage::Binary(data) => TungMessage::Binary(data),
+                TungMessage::Ping(data) => TungMessage::Pong(data),
+                TungMessage::Pong(_) => continue,
+                // if close, forward it (as specified in WebSocket RFC)
+                TungMessage::Close(_) => break,
                 TungMessage::Frame(_) => unreachable!("should never be sent"),
             };
 

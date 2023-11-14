@@ -7,7 +7,6 @@ use edgehog_device_forwarder_proto::{
 };
 use futures::{SinkExt, StreamExt};
 use prost::Message;
-use uuid::Uuid;
 
 #[cfg(feature = "_test-utils")]
 #[tokio::test]
@@ -23,7 +22,7 @@ async fn test_connect() {
 
     let mut ws = test_connections.mock_ws_server().await;
 
-    let request_id = Uuid::new_v4().as_bytes().to_vec();
+    let request_id = "3647edbb-6747-4827-a3ef-dbb6239e3326".as_bytes().to_vec();
     let http_req = create_http_req(request_id, &test_url);
 
     ws.send(http_req.clone())

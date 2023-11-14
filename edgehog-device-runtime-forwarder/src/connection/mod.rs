@@ -9,7 +9,7 @@
 pub mod http;
 pub mod websocket;
 
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 
 use async_trait::async_trait;
 use displaydoc::Display;
@@ -48,6 +48,9 @@ pub enum ConnectionError {
     Connecting,
 }
 
+/// Enum storing the write side of the channel used by the
+/// [Connections Manager](crate::connections_manager::ConnectionsManager) to send WebSocket
+/// messages to the respective Connection that will handle it.
 #[derive(Debug)]
 pub(crate) enum WriteHandle {
     Http,
@@ -57,8 +60,10 @@ pub(crate) enum WriteHandle {
 /// Handle to the task spawned to handle a [`Connection`].
 #[derive(Debug)]
 pub(crate) struct ConnectionHandle {
-    handle: JoinHandle<()>,
-    connection: WriteHandle,
+    /// Handle of the task managing the connection.
+    pub(crate) handle: JoinHandle<()>,
+    ///
+    pub(crate) connection: WriteHandle,
 }
 
 impl ConnectionHandle {
@@ -87,12 +92,6 @@ impl Deref for ConnectionHandle {
 
     fn deref(&self) -> &Self::Target {
         &self.handle
-    }
-}
-
-impl DerefMut for ConnectionHandle {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.handle
     }
 }
 
@@ -157,7 +156,7 @@ impl<T> Connection<T> {
 
     /// Send an HTTP request, wait for a response, build a protobuf message and send it to the
     /// [ConnectionsManager](crate::connections_manager::ConnectionsManager).
-    #[instrument(skip_all, fields(id = %self.id))]
+    #[instrument(skip_all)]
     pub(crate) async fn task(self) -> Result<(), ConnectionError>
     where
         T: TransportBuilder,
@@ -217,7 +216,6 @@ mod tests {
 
     use http::header::CONTENT_TYPE;
     use http::HeaderValue;
-    use httpmock::Method::GET;
     use httpmock::MockServer;
     use tokio::sync::mpsc::channel;
     use url::Url;
@@ -239,7 +237,7 @@ mod tests {
         let url = Url::parse(url).expect("failed to pars Url");
 
         ProtoMessage::Http(ProtoHttp::new(
-            Id::new(b"1234".to_vec()),
+            Id::try_from(b"1234".to_vec()).unwrap(),
             ProtoHttpMessage::Request(create_http_req_proto(url)),
         ))
     }
@@ -254,8 +252,8 @@ mod tests {
         };
 
         let proto_msg = ProtoMessage::WebSocket(ProtoWebSocket {
-            socket_id: Id::new(b"1234".to_vec()),
-            message: ProtoWebSocketMessage::binary(b"message".to_vec()),
+            socket_id: Id::try_from(b"1234".to_vec()).unwrap(),
+            message: ProtoWebSocketMessage::Binary(b"message".to_vec()),
         });
 
         let res = con_handle.send(proto_msg).await;
@@ -263,7 +261,7 @@ mod tests {
         assert!(res.is_ok());
 
         let res = rx.recv().await.expect("channel error");
-        let expected_res = ProtoWebSocketMessage::binary(b"message".to_vec());
+        let expected_res = ProtoWebSocketMessage::Binary(b"message".to_vec());
 
         assert_eq!(res, expected_res);
     }
@@ -277,8 +275,8 @@ mod tests {
         };
 
         let proto_msg = ProtoMessage::WebSocket(ProtoWebSocket {
-            socket_id: Id::new(b"1234".to_vec()),
-            message: ProtoWebSocketMessage::binary(b"message".to_vec()),
+            socket_id: Id::try_from(b"1234".to_vec()).unwrap(),
+            message: ProtoWebSocketMessage::Binary(b"message".to_vec()),
         });
 
         let res = con_handle.send(proto_msg).await;
@@ -303,7 +301,7 @@ mod tests {
         let mock_server = MockServer::start();
 
         let mock_http_req = mock_server.mock(|when, then| {
-            when.method(GET)
+            when.method(httpmock::Method::GET)
                 .path("/path")
                 .query_param("session_token", "abcd");
             then.status(200)
@@ -322,7 +320,7 @@ mod tests {
                 .expect("failed to retrieve request builder"),
         );
 
-        let id = Id::new(b"1234".to_vec());
+        let id = Id::try_from(b"1234".to_vec()).unwrap();
 
         let res = http.next(&id).await.unwrap().unwrap();
 

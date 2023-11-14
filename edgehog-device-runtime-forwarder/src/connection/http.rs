@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use tokio::sync::mpsc::Sender;
-use tracing::{debug, instrument, trace};
+use tracing::{instrument, trace};
 
 use super::{ConnectionError, Transport, TransportBuilder};
 use crate::messages::{
@@ -82,8 +82,6 @@ impl Transport for Http {
 
         // create the protobuf response to send to the bridge
         let proto_res = ProtoHttpResponse::from_reqw_response(http_res).await?;
-
-        debug!("response code {}", proto_res.status());
 
         let proto_msg = ProtoMessage::Http(ProtoHttp::new(
             id.clone(),

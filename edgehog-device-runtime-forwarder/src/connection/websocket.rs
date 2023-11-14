@@ -47,7 +47,7 @@ impl WebSocketBuilder {
 impl TransportBuilder for WebSocketBuilder {
     type Connection = WebSocket;
 
-    #[instrument(skip(self, tx_ws))]
+    #[instrument(skip_all)]
     async fn build(
         self,
         id: &Id,

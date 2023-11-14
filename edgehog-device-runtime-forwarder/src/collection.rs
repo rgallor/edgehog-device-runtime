@@ -147,3 +147,56 @@ impl Connections {
         self.connections.clear();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::connection::WriteHandle;
+    use std::future::Future;
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tokio::sync::Barrier;
+
+    fn create_con_handle<F>(f: F) -> Result<ConnectionHandle, Error>
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        Ok(ConnectionHandle {
+            handle: tokio::spawn(f),
+            connection: WriteHandle::Http,
+        })
+    }
+
+    #[tokio::test]
+    async fn test_try_add() {
+        let (tx, _rx) = tokio::sync::mpsc::channel::<ProtoMessage>(50);
+        let mut collection = Connections::new(tx);
+
+        let id = Id::try_from(b"test_id".to_vec()).unwrap();
+
+        // use a barrier to wait one join handle task to be finished
+        let barrier = Arc::new(Barrier::new(2));
+        let barrier_cl = Arc::clone(&barrier);
+
+        // add a new connection
+        let res = collection.try_add(id.clone(), || {
+            create_con_handle(async move {
+                barrier_cl.wait().await;
+            })
+        });
+
+        barrier.wait().await;
+        assert!(res.is_ok());
+
+        // add a connection with the same ID whose task is ended
+        let res = collection.try_add(id.clone(), || {
+            create_con_handle(tokio::time::sleep(Duration::from_secs(10)))
+        });
+        assert!(res.is_ok(), "but got error {}", res.unwrap_err());
+
+        // add a new connection
+        let res = collection.try_add(id.clone(), || create_con_handle(futures::future::ready(())));
+
+        assert!(res.is_err());
+    }
+}

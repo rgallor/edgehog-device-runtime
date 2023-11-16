@@ -54,7 +54,22 @@ impl TransportBuilder for WebSocketBuilder {
         tx_ws: Sender<ProtoMessage>,
     ) -> Result<Self::Connection, ConnectionError> {
         // establish a WebSocket connection
-        let (ws_stream, http_res) = tokio_tungstenite::connect_async(self.request).await?;
+        let (ws_stream, http_res) = match tokio_tungstenite::connect_async(self.request).await {
+            Ok(ws_res) => ws_res,
+            Err(err) => {
+                debug!("HTTP upgrade request failed: {err}");
+                let proto_msg = ProtoMessage::Http(ProtoHttp::bad_gateway(id.clone()));
+
+                tx_ws.send(proto_msg).await.map_err(|_| {
+                    ConnectionError::Channel(
+                        "error while returning the Http upgrade response to the ConnectionsManager",
+                    )
+                })?;
+
+                return Err(ConnectionError::WebSocket(err));
+            }
+        };
+
         trace!("WebSocket stream for ID {id} created");
 
         // send a ProtoMessage with the HTTP generated response to the connections manager

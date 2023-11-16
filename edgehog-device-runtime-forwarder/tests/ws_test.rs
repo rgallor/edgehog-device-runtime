@@ -11,8 +11,8 @@ use tungstenite::Message as TungMessage;
 
 #[cfg(feature = "_test-utils")]
 use edgehog_device_runtime_forwarder::test_utils::{
-    create_http_upgrade_req, create_ws_close, create_ws_msg, is_ws_upgrade_response,
-    send_ws_and_wait_next, send_ws_close, MockWebSocket, TestConnections,
+    create_http_upgrade_req, create_ws_msg, is_ws_upgrade_response, send_ws_and_wait_next,
+    MockWebSocket, TestConnections,
 };
 
 #[cfg(feature = "_test-utils")]
@@ -76,19 +76,4 @@ async fn test_internal_ws() {
             }))
         }
     );
-
-    // // sending Text frame should cause
-    // let content = b"pong".to_vec();
-    // let data = TungMessage::Pong(content.clone());
-    // let ws_ping_msg = create_ws_msg(socket_id.clone(), data.clone());
-    // let protobuf_res = send_ws_and_wait_next(&mut ws_bridge, ws_ping_msg).await;
-    //
-    // // TODO: stop time and verify that after 10s nothing has been received.
-    // // no msg is replied in case a pong frame is sent
-    //
-    // // sending close frame
-    // let ws_close_msg = create_ws_close(socket_id.clone(), 1000, None);
-    // let res = send_ws_close(&mut ws_bridge, ws_close_msg).await;
-    //
-    // assert!(res.is_err());
 }

@@ -135,11 +135,21 @@ impl ConnectionsManager {
         loop {
             match self.event_loop().await {
                 Ok(ControlFlow::Continue(())) => {}
+                // if the device received a message bigger than the maximum size, drop the message
+                // but keep looping for next events
+                // TODO: it could be useful to have an Internal protobuf message type to communicate the bridge this error.
+                Err(TungError::Capacity(err)) => {
+                    error!("capacity exceeded: {err}");
+                }
                 // if a close frame has been received or the closing handshake is correctly
                 // terminated, the manager terminates the handling of the connections
                 Ok(ControlFlow::Break(())) | Err(TungError::ConnectionClosed) => break,
                 // if the connection has been suddenly interrupted, try re-establishing it.
                 // only Tungstenite errors should be handled for device reconnection
+                Err(TungError::AlreadyClosed) => {
+                    error!("BUG: trying to read/write on an already closed websocket");
+                    break;
+                }
                 Err(err) => {
                     error!("WebSocket error {err:?}");
                     self.reconnect().await?;

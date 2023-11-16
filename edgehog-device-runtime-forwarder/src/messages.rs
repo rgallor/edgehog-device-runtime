@@ -208,6 +208,17 @@ impl Http {
             http_msg,
         }
     }
+
+    pub(crate) fn bad_gateway(request_id: Id) -> Self {
+        Self {
+            request_id,
+            http_msg: HttpMessage::Response(HttpResponse {
+                status_code: http::StatusCode::BAD_GATEWAY,
+                headers: http::HeaderMap::new(),
+                body: Vec::new(),
+            }),
+        }
+    }
 }
 
 impl TryFrom<ProtobufHttp> for Http {

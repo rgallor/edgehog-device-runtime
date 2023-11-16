@@ -43,11 +43,8 @@ pub async fn con_manager(url: String) -> Result<(), Error> {
     con_manager.handle_connections().await
 }
 
-/// Create an HTTP request and wrap it into a [`tungstenite`] message.
-pub fn create_http_req(request_id: Vec<u8>, url: &str) -> TungMessage {
-    let url = Url::parse(url).expect("failed to pars Url");
-
-    let proto_msg = proto::Message {
+fn proto_http_req(request_id: Vec<u8>, url: &Url, body: Vec<u8>) -> proto::Message {
+    proto::Message {
         protocol: Some(ProtobufProtocol::Http(ProtobufHttp {
             request_id,
             message: Some(ProtobufHttpMessage::Request(ProtobufHttpRequest {
@@ -55,11 +52,33 @@ pub fn create_http_req(request_id: Vec<u8>, url: &str) -> TungMessage {
                 method: "GET".to_string(),
                 query_string: url.query().unwrap_or_default().to_string(),
                 headers: HashMap::new(),
-                body: Vec::new(),
+                body,
                 port: url.port().expect("nonexistent port").into(),
             })),
         })),
-    };
+    }
+}
+
+/// Create an HTTP request and wrap it into a [`tungstenite`] message.
+pub fn create_http_req(request_id: Vec<u8>, url: &str) -> TungMessage {
+    let url = Url::parse(url).expect("failed to pars Url");
+
+    let proto_msg = proto_http_req(request_id, &url, Vec::new());
+
+    let mut buf = Vec::with_capacity(proto_msg.encoded_len());
+    proto_msg.encode(&mut buf).unwrap();
+
+    TungMessage::Binary(buf)
+}
+
+/// Create an HTTP request with a body greater than 64MiB, which is the default max websocket
+/// message size, and wrap it into a [`tungstenite`] message.
+pub fn create_big_http_req(request_id: Vec<u8>, url: &str) -> TungMessage {
+    let url = Url::parse(url).expect("failed to pars Url");
+
+    // create an HTTP request with a body of 16MiB. This will exceed the maximum payload size of
+    // a websocket tungstenite default frame
+    let proto_msg = proto_http_req(request_id, &url, vec![0u8; 16777216]);
 
     let mut buf = Vec::with_capacity(proto_msg.encoded_len());
     proto_msg.encode(&mut buf).unwrap();

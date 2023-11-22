@@ -25,7 +25,7 @@ use std::{collections::HashMap, num::TryFromIntError};
 use astarte_device_sdk::{types::AstarteType, AstarteAggregate, AstarteError as SdkError};
 use displaydoc::Display;
 use thiserror::Error;
-use tracing::instrument;
+use tracing::{instrument, warn};
 use url::{Host, ParseError, Url};
 
 /// Astarte errors.
@@ -52,7 +52,8 @@ pub struct ConnectionInfo {
     pub host: Host,
     /// Port number.
     pub port: u16,
-    session_token: String,
+    /// Session token.
+    pub session_token: String,
 }
 
 impl AstarteAggregate for ConnectionInfo {

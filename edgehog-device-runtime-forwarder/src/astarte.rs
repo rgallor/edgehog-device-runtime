@@ -25,7 +25,7 @@ use std::{collections::HashMap, num::TryFromIntError};
 use astarte_device_sdk::{types::AstarteType, AstarteAggregate, AstarteError as SdkError};
 use displaydoc::Display;
 use thiserror::Error;
-use tracing::{instrument, warn};
+use tracing::instrument;
 use url::{Host, ParseError, Url};
 
 /// Astarte errors.
@@ -54,6 +54,8 @@ pub struct ConnectionInfo {
     pub port: u16,
     /// Session token.
     pub session_token: String,
+    /// State if the session must be closed or not
+    pub close: bool,
 }
 
 impl AstarteAggregate for ConnectionInfo {
@@ -62,6 +64,7 @@ impl AstarteAggregate for ConnectionInfo {
         hm.insert("host".to_string(), self.host.to_string().into());
         hm.insert("port".to_string(), AstarteType::Integer(self.port.into()));
         hm.insert("session_token".to_string(), self.session_token.into());
+        hm.insert("close".to_string(), AstarteType::Boolean(self.close));
         Ok(hm)
     }
 }
@@ -104,10 +107,16 @@ pub fn retrieve_connection_info(
         .ok_or_else(|| AstarteError::MissingUrlInfo("Missing session_token"))?
         .try_into()?;
 
+    let close = map
+        .remove("close")
+        .ok_or_else(|| AstarteError::MissingUrlInfo("Missing close information"))?
+        .try_into()?;
+
     Ok(ConnectionInfo {
         host,
         port,
         session_token,
+        close,
     })
 }
 
@@ -121,6 +130,7 @@ mod tests {
             host: Host::Ipv4(Ipv4Addr::LOCALHOST),
             port: 8080,
             session_token: token.to_string(),
+            close: false,
         }
     }
 

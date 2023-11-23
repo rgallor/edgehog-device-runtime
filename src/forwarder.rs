@@ -21,6 +21,7 @@
 //! Manage the device forwarder operation.
 
 use std::borrow::Borrow;
+use std::sync::Arc;
 use std::{
     collections::{hash_map::Entry, HashMap},
     hash::Hash,
@@ -35,6 +36,7 @@ use edgehog_forwarder::connections_manager::ConnectionsManager;
 use log::error;
 use reqwest::Url;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 #[derive(Debug)]
@@ -98,6 +100,101 @@ impl From<SessionState> for AstarteType {
     }
 }
 
+#[derive(Debug)]
+struct Session {
+    handle: JoinHandle<()>,
+    notify_close: Arc<Notify>,
+}
+
+impl Session {
+    fn new(bridge_url: Url, session_token: String, tx_state: Sender<SessionState>) -> Self {
+        // notifier to terminate the session
+        let notify_close = Arc::new(Notify::new());
+
+        // spawn a new task responsible for handling the remote terminal operations
+        let handle = Self::spawn_task(
+            bridge_url,
+            session_token,
+            tx_state,
+            Arc::clone(&notify_close),
+        );
+
+        Self {
+            handle,
+            notify_close,
+        }
+    }
+
+    fn close(&self) {
+        self.notify_close.notify_one()
+    }
+
+    /// Spawn the task responsible for handling a device forwarder instance.
+    fn spawn_task(
+        bridge_url: Url,
+        session_token: String,
+        tx_state: Sender<SessionState>,
+        notify_close: Arc<Notify>,
+    ) -> JoinHandle<()> {
+        tokio::spawn(Self::handle_session(
+            bridge_url,
+            session_token,
+            tx_state,
+            notify_close,
+        ))
+    }
+
+    /// Handle remote session connection, operations and disconnection.
+    async fn handle_session(
+        bridge_url: Url,
+        session_token: String,
+        tx_state: Sender<SessionState>,
+        _notify_close: Arc<Notify>,
+    ) {
+        // TODO: handle reception of Notify event and call con_manager.disconnect().
+
+        // use take()
+        match ConnectionsManager::connect(bridge_url.clone()).await {
+            Ok(mut con_manager) => {
+                Self::connect(session_token.clone(), &tx_state).await;
+
+                // handle the connections
+                if let Err(err) = con_manager.handle_connections().await {
+                    error!("failed to handle connections, {err}");
+                }
+
+                Self::disconnect(session_token, &tx_state).await;
+            }
+            Err(err) => error!("failed to connect, {err}"),
+        }
+    }
+
+    // update the session state to "connected"
+    async fn connect(session_token: String, tx_state: &Sender<SessionState>) {
+        if let Err(err) = tx_state.send(SessionState::connected(session_token)).await {
+            error!("failed to change session state to connected, {err}");
+        }
+    }
+
+    // update the session state to "disconnected"
+    async fn disconnect(session_token: String, tx_state: &Sender<SessionState>) {
+        if let Err(err) = tx_state
+            .send(SessionState::disconnected(session_token))
+            .await
+        {
+            error!("failed to change session state to connected, {err}");
+        }
+    }
+}
+
+impl Deref for Session {
+    type Target = JoinHandle<()>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
+    }
+}
+
 /// Device forwarder.
 ///
 /// It maintains a collection of tokio task handles, each one identified by a [`Key`] containing
@@ -106,7 +203,7 @@ impl From<SessionState> for AstarteType {
 #[derive(Debug)]
 pub struct Forwarder {
     tx_state: Sender<SessionState>,
-    tasks: HashMap<Key, JoinHandle<()>>,
+    sessions: HashMap<Key, Session>,
 }
 
 const CHANNEL_STATE_SIZE: usize = 50;
@@ -126,7 +223,7 @@ impl Forwarder {
 
         Self {
             tx_state,
-            tasks: Default::default(),
+            sessions: Default::default(),
         }
     }
 
@@ -167,6 +264,19 @@ impl Forwarder {
             }
         };
 
+        // Terminate the session in case if a close RemoteTerminalRequest is received
+        let session_token = cinfo.session_token.clone();
+        if cinfo.close {
+            let Entry::Occupied(session) = self.get_running(cinfo) else {
+                error!("Nonexistent session {session_token}");
+                return;
+            };
+
+            // send notify to terminate the session
+            session.get().close();
+            return;
+        }
+
         let bridge_url = match Url::try_from(&cinfo) {
             Ok(url) => url,
             Err(err) => {
@@ -177,10 +287,8 @@ impl Forwarder {
 
         // check if the remote terminal task is already running. if not, spawn a new task and add it to the collection
         let tx_state = self.tx_state.clone();
-        let session_token = cinfo.session_token.clone();
-        self.get_running(cinfo).or_insert_with(||
-            // spawn a new task responsible for handling the remote terminal operations
-            Self::spawn_task(bridge_url, session_token, tx_state));
+        self.get_running(cinfo)
+            .or_insert_with(|| Session::new(bridge_url, session_token, tx_state));
     }
 
     fn retrieve_astarte_data(
@@ -200,53 +308,9 @@ impl Forwarder {
     }
 
     /// Remove terminated sessions and return the searched one.
-    fn get_running(&mut self, cinfo: ConnectionInfo) -> Entry<Key, JoinHandle<()>> {
+    fn get_running(&mut self, cinfo: ConnectionInfo) -> Entry<Key, Session> {
         // remove all finished tasks
-        self.tasks.retain(|_, jh| !jh.is_finished());
-
-        self.tasks.entry(Key(cinfo))
-    }
-
-    /// Spawn the task responsible for handling a device forwarder instance.
-    fn spawn_task(
-        bridge_url: Url,
-        session_token: String,
-        tx_state: Sender<SessionState>,
-    ) -> JoinHandle<()> {
-        tokio::spawn(Self::handle_session(bridge_url, session_token, tx_state))
-    }
-
-    /// Handle remote session connection, operations and disconnection.
-    async fn handle_session(
-        bridge_url: Url,
-        session_token: String,
-        tx_state: Sender<SessionState>,
-    ) {
-        // use take()
-        match ConnectionsManager::connect(bridge_url.clone()).await {
-            Ok(mut con_manager) => {
-                // update the session state to "connected"
-                if let Err(err) = tx_state
-                    .send(SessionState::connected(session_token.clone()))
-                    .await
-                {
-                    error!("failed to change session state to connected, {err}");
-                }
-
-                // handle the connections
-                if let Err(err) = con_manager.handle_connections().await {
-                    error!("failed to handle connections, {err}");
-                }
-
-                // update the session state to "disconnected"
-                if let Err(err) = tx_state
-                    .send(SessionState::disconnected(session_token))
-                    .await
-                {
-                    error!("failed to change session state to connected, {err}");
-                }
-            }
-            Err(err) => error!("failed to connect, {err}"),
-        }
+        self.sessions.retain(|_, jh| !jh.is_finished());
+        self.sessions.entry(Key(cinfo))
     }
 }

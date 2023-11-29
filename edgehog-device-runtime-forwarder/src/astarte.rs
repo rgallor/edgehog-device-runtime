@@ -61,7 +61,7 @@ impl TryFrom<&ConnectionInfo> for Url {
 
         Url::parse_with_params(
             &format!("ws://{}:{}/device/websocket", value.host, value.port),
-            &[("session_token", &value.session_token)],
+            &[("session", &value.session_token)],
         )
         .map_err(AstarteError::ParseUrl)
     }
@@ -101,11 +101,11 @@ mod tests {
     use super::*;
     use std::net::Ipv4Addr;
 
-    fn create_cinfo(token: &str) -> ConnectionInfo {
+    fn create_cinfo(session_token: &str) -> ConnectionInfo {
         ConnectionInfo {
             host: Host::Ipv4(Ipv4Addr::LOCALHOST),
             port: 8080,
-            session_token: token.to_string(),
+            session_token: session_token.to_string(),
         }
     }
 
@@ -171,7 +171,7 @@ mod tests {
 
         assert_eq!(case.host(), Some(Host::Ipv4(Ipv4Addr::LOCALHOST)));
         assert_eq!(case.port(), Some(8080));
-        assert_eq!(case.query(), Some("session_token=test_token"));
+        assert_eq!(case.query(), Some("session=test_token"));
     }
 
     #[test]

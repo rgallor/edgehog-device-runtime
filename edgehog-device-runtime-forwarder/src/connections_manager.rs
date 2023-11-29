@@ -299,7 +299,7 @@ impl ConnectionsManager {
 
 fn get_token(url: &Url) -> Result<String, Error> {
     url.query()
-        .map(|s| s.trim_start_matches("session_token=").to_string())
+        .map(|s| s.trim_start_matches("session=").to_string())
         .ok_or(Error::TokenNotFound)
 }
 

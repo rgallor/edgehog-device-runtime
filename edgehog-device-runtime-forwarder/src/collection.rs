@@ -13,7 +13,7 @@ use tracing::{debug, error, instrument, trace};
 use crate::connection::{Connection, ConnectionHandle};
 use crate::connections_manager::Error;
 use crate::messages::{
-    Http as ProtoHttp, HttpRequest, Id, ProtoMessage, WebSocket as ProtoWebSocket,
+    Http as ProtoHttp, HttpRequest, Id, ProtoMessage, Tcp as ProtoTcp, WebSocket as ProtoWebSocket,
 };
 
 /// Connections' collection between the device and Edgehog.
@@ -104,6 +104,18 @@ impl Connections {
                 Err(Error::ConnectionNotFound(socket_id))
             }
         }
+    }
+
+    pub(crate) async fn handle_tcp(&mut self, tcp: ProtoTcp) -> Result<(), Error> {
+        /*
+        (same as try_add + handle_ws)
+
+        1. extract info from ProtoTcp
+        2. check if there exists a TCP connection with the id -> the TCP id could be generated with a hash of src & dst port & IP
+            2.1. create a connection if it doesn't exists
+        3. handle tcp segment (send tcp message to channel)
+         */
+        todo!()
     }
 
     /// Try add a new connection.

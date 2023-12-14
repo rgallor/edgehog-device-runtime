@@ -101,6 +101,7 @@ impl TryFrom<Vec<u8>> for Id {
 pub(crate) enum ProtoMessage {
     Http(Http),
     WebSocket(WebSocket),
+    Tcp(Tcp),
 }
 
 impl ProtoMessage {
@@ -138,8 +139,8 @@ impl ProtoMessage {
     /// Return the internal WebSocket message if it matches the type.
     pub(crate) fn into_ws(self) -> Option<WebSocket> {
         match self {
-            ProtoMessage::Http(_) => None,
             ProtoMessage::WebSocket(ws) => Some(ws),
+            ProtoMessage::Http(_) | ProtoMessage::Tcp(_) => None,
         }
     }
 
@@ -148,7 +149,7 @@ impl ProtoMessage {
     pub(crate) fn into_http(self) -> Option<Http> {
         match self {
             ProtoMessage::Http(http) => Some(http),
-            ProtoMessage::WebSocket(_) => None,
+            ProtoMessage::WebSocket(_) | ProtoMessage::Tcp(_) => None,
         }
     }
 }
@@ -187,8 +188,13 @@ impl From<ProtoMessage> for ProtobufProtocol {
             }
             ProtoMessage::WebSocket(ws) => {
                 let proto_ws = ProtobufWebSocket::from(ws);
-
                 ProtobufProtocol::Ws(proto_ws)
+            }
+            ProtoMessage::Tcp(tcp) => {
+                // TODO: add TCP in the protobuf definition
+                // let proto_tcp = ProtobufTcp::from(tcp);
+                // ProtobufProtocol::Tcp(proto_tcp)
+                todo!()
             }
         }
     }
@@ -604,6 +610,22 @@ impl From<WebSocketMessage> for TungMessage {
         }
     }
 }
+
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) struct Tcp {
+    // TODO: define fields
+    id: Id,
+    segment: TcpSegment,
+}
+
+// impl From<Tcp> for ProtobufTcp {
+//     fn from(value: Tcp) -> Self {
+//         todo!()
+//     }
+// }
+
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) struct TcpSegment(Vec<u8>); // etherparse::TcpHeader
 
 /// Convert a [`HeaderMap`] containing all HTTP headers into a [`HashMap`].
 pub(crate) fn headermap_to_hashmap<'a, I>(headers: I) -> HashMap<String, String>

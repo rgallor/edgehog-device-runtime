@@ -7,6 +7,7 @@
 //! and to the [`ConnectionsManager`](crate::connections_manager::ConnectionsManager).
 
 pub mod http;
+mod tcp;
 pub mod websocket;
 
 use std::ops::Deref;
@@ -18,7 +19,10 @@ use tokio::task::{JoinError, JoinHandle};
 use tokio_tungstenite::tungstenite::Error as TungError;
 use tracing::{error, instrument, trace};
 
-use crate::messages::{Id, ProtoMessage, ProtocolError, WebSocketMessage as ProtoWebSocketMessage};
+use crate::messages::{
+    Id, ProtoMessage, ProtocolError, TcpSegment as ProtoTcpSegment,
+    WebSocketMessage as ProtoWebSocketMessage,
+};
 
 /// Size of the channel used to send messages from the [Connections Manager](crate::connections_manager::ConnectionsManager)
 /// to a device WebSocket connection
@@ -51,6 +55,7 @@ pub enum ConnectionError {
 pub(crate) enum WriteHandle {
     Http,
     Ws(Sender<ProtoWebSocketMessage>),
+    Tcp(Sender<ProtoTcpSegment>),
 }
 
 /// Handle to the task spawned to handle a [`Connection`].
@@ -86,6 +91,13 @@ impl ConnectionHandle {
                         "error while sending messages to the ConnectionsManager",
                     )
                 })
+            }
+            WriteHandle::Tcp(tx_tcp) => {
+                /*
+                1. extract the message (=> build a Tcp segment using [etherparse](https://docs.rs/etherparse/latest/etherparse/index.html))
+                2. send it to the task handling tcp segments
+                 */
+                todo!()
             }
         }
     }

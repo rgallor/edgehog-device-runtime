@@ -304,6 +304,10 @@ impl ConnectionsManager {
                 trace!("received WebSocket frame: {ws:?}");
                 self.connections.handle_ws(ws).await
             }
+            ProtoMessage::Tcp(tcp) => {
+                trace!("received tcp segment: {tcp:?}");
+                self.connections.handle_tcp(tcp).await
+            }
         }
     }
 

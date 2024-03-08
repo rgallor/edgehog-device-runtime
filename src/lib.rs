@@ -462,11 +462,24 @@ mod tests {
         };
 
         let mut publisher = MockPublisher::new();
-        publisher.expect_clone().returning(MockPublisher::new);
 
-        let subscribeer = MockSubscriber::new();
+        #[cfg(feature = "forwarder")]
+        // define an expectation for the cloned MockPublisher due to the `init` method of the
+        // Forwarder struct
+        publisher.expect_clone().returning(move || {
+            let mut publisher_clone = MockPublisher::new();
 
-        let dm = DeviceManager::new(options, publisher, subscribeer).await;
+            publisher_clone
+                .expect_interface_props()
+                .withf(move |iface: &str| iface == "io.edgehog.devicemanager.ForwarderSessionState")
+                .returning(|_: &str| Ok(Vec::new()));
+
+            publisher_clone
+        });
+
+        let subscriber = MockSubscriber::new();
+
+        let dm = DeviceManager::new(options, publisher, subscriber).await;
         assert!(dm.is_ok(), "error {}", dm.err().unwrap());
     }
 
@@ -493,7 +506,20 @@ mod tests {
         let os_info = get_os_info().await.expect("failed to get os info");
         let mut publisher = MockPublisher::new();
 
-        publisher.expect_clone().returning(MockPublisher::new);
+        #[cfg(feature = "forwarder")]
+        // define an expectation for the cloned MockPublisher due to the `init` method of the
+        // Forwarder struct
+        publisher.expect_clone().returning(move || {
+            let mut publisher_clone = MockPublisher::new();
+
+            publisher_clone
+                .expect_interface_props()
+                .withf(move |iface: &str| iface == "io.edgehog.devicemanager.ForwarderSessionState")
+                .returning(|_: &str| Ok(Vec::new()));
+
+            publisher_clone
+        });
+
         publisher
             .expect_send()
             .withf(
